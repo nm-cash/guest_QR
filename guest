@@ -1,0 +1,145 @@
+#!/bin/sh
+# --------------------------------------------------------------
+# guest2 – landingpage display de QR, SSID, tipo y contraseña
+# --------------------------------------------------------------
+
+printf "Content-Type: text/html\r\n\r\n"
+
+# --------------------------------------------------------------
+# Funcion para mapear encryption (UCI) → WEP o WPA para QR.
+# Basándonos sobre el llamado uci,
+# "uci -q get wireless.${IFACE}.encryption"
+# Obtenemos distintos tipos de cifrado: wep, psk, psk2 psk-mixed, sae, sae-mixed.
+# Y los convertimos a su respectivo tipo de red. Todos WPA menos cuando es WEP.
+# --------------------------------------------------------------
+qr_security() {
+    case "$1" in
+        wep* ) echo "WEP" ;;
+        * ) echo "WPA" ;;   # Incluye psk, psk2, sae, sae-mixed, psk-mixed
+    esac
+}
+
+# --------------------------------------------------------------
+# Directorio donde generaremos QR accesibles desde uhttpd
+# --------------------------------------------------------------
+QRDIR="/www/guestqr"
+mkdir -p "$QRDIR"
+
+# Limpieza opcional (evitar QR viejos)
+rm -f "$QRDIR"/*.svg 2>/dev/null
+
+# --------------------------------------------------------------
+# Obtener todas las wifi-iface (sections)
+# --------------------------------------------------------------
+IFACES=$(uci show wireless | grep "=wifi-iface" | cut -d'.' -f2 | cut -d'=' -f1)
+
+# --------------------------------------------------------------
+# Inicia HTML
+# --------------------------------------------------------------
+cat <<'EOF'
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acceso Wi-Fi</title>
+<style>
+:root{
+  --bg:#f7f7f7; --card:#fff; --text:#222; --muted:#666; --accent:#0066cc;
+}
+[data-theme="dark"]{
+  --bg:#0d1117; --card:#0b1220; --text:#e6eef8; --muted:#9fb0c8; --accent:#58a6ff;
+}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+  background:var(--bg); color:var(--text); margin:1rem;
+}
+.container{max-width:900px;margin:0 auto;}
+h1{color:var(--accent);}
+.card{
+  background:var(--card); padding:1rem; border-radius:8px;
+  box-shadow:0 6px 18px rgba(2,6,23,.08); margin-bottom:1rem;
+}
+.qr{max-width:240px; width:100%; border-radius:6px;}
+.small{font-size:.9rem;color:var(--muted);}
+.iface-block{
+  margin:1rem 0; padding:1rem;
+  background:var(--card); border-radius:8px;
+  box-shadow:0 6px 18px rgba(2,6,23,.08);
+}
+.switch{display:flex; gap:.5rem; align-items:center; margin-bottom:1rem;}
+.btn{
+  background:var(--accent); color:white; border:none;
+  padding:.5rem .8rem; border-radius:6px; cursor:pointer;
+}
+.btn.secondary{background:transparent;color:var(--accent);border:1px solid rgba(0,0,0,.06);}
+</style>
+</head>
+<body>
+<div class="container card">
+<h1>Acceso Wi-Fi</h1>
+<div class="small">Puntos de acceso detectados automáticamente desde UCI.</div>
+
+<div class="switch">
+  <label class="small">Tema</label>
+  <button class="btn secondary" id="themeToggle">Toggle</button>
+</div>
+EOF
+
+# --------------------------------------------------------------
+# Iterate ifaces — obtener SSID, key, enc, generar QR
+# Acá es donde obtenemos toda la información mediante llamados uci y la volcamos a variables.
+# --------------------------------------------------------------
+for IFACE in $IFACES; do
+    SSID="$(uci -q get wireless.${IFACE}.ssid)"
+    ENC="$(uci -q get wireless.${IFACE}.encryption)"
+    KEY="$(uci -q get wireless.${IFACE}.key)"
+
+    [ -z "$SSID" ] && SSID="$IFACE"
+    [ -z "$KEY" ] && KEY="(sin contraseña / open)"
+    TYPE="$(qr_security "$ENC")"
+
+    # Archivo QR accesible desde web
+    QRFILE="${QRDIR}/${IFACE}.svg"
+    WIFI_STRING="WIFI:T:${TYPE};S:${SSID};P:${KEY};;"
+
+    # Generar QR
+    qrencode -t SVG -o "$QRFILE" "$WIFI_STRING" 2>/dev/null
+
+    # Insertar bloque HTML
+    cat <<ITEM
+<div class="iface-block">
+  <div><strong>SSID:</strong> ${SSID}</div>
+  <div class="small">Section: <code>${IFACE}</code> · Tipo: <code>${TYPE}</code></div>
+  <div style="margin:.4rem 0;"><span class="small">Contraseña:</span> <code>${KEY}</code></div>
+  <img class="qr" src="/guestqr/${IFACE}.svg" alt="QR ${IFACE}">
+</div>
+ITEM
+done
+
+# --------------------------------------------------------------
+# Fin HTML
+# --------------------------------------------------------------
+cat <<'EOF'
+</div>
+
+<script>
+// ---------- Dark/Light ----------
+(function(){
+  function apply(t){
+    if(t==="dark") document.documentElement.setAttribute("data-theme","dark");
+    else document.documentElement.removeAttribute("data-theme");
+    localStorage.setItem("guest2_theme",t);
+  }
+  const saved = localStorage.getItem("guest2_theme") || "light";
+  apply(saved);
+  document.getElementById("themeToggle").addEventListener("click", ()=>{
+    const cur = localStorage.getItem("guest2_theme") || "light";
+    apply(cur==="dark" ? "light" : "dark");
+  });
+})();
+</script>
+
+</body>
+</html>
+EOF
