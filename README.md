@@ -1,2 +1,7 @@
-# guest_QR
-Landingpage para OpenWRT que presenta accesos QR para los invitados. 
+# 📃 Un landingpage en OpenWRT que presenta accesos QR para las redes de invitados.
+Recientemente leí una guía en internet que mostraba cómo crear dos archivos en el router. 🎲 Un rotador de contraseñas para las interfaces wi-fi de un router OpenWRT, que aprovechaba `qrencode` para generar archivos 'QR*.svg' que eran volcados sobre el directorio `/www/` en el router. Y otro, 📋 un landingpage en `/www/cgi-bin/`, que utilizaba esos archivos 'QR*.svg' generados para exhibir los accesos a cada red de invitados. Todo apoyado sobre las posibilidades que brindan `uhttpd` y `qrencode` instalados en el router.
+
+🛠️ Basado sobre esta lógica, adapté el script y el landingpage para que sus funcionalidades sean más limpias. 
+- Primero, el script original establecía shell variables donde manualmente se debían inputar los datos como SSID, el tipo de red, etc. Esto no es óptimo y puede conducir a confusiones. Ajusté al script, para que todo sea obtenido automáticamente mediante llamadas UCI.
+- En mí opinión, ambos debían ser independientes entre ellos. Si yo quiero rotar de contraseñas con un script atado a cron eso está bien. Pero la exhibición de QRs en un landingpage para invitados no puede depender de la existencia o no de ese script, que los esté generando por fuera de él (y nuevamente "☝🏻 tener todo separado puede generar confusiones"). La generación de QR entonces ahora va a ir embebida dentro del CGI script, y no va a depender de ningún rotador. Tener un rotador ahora es opcional.
+- 💾 En líneas generales, usamos llamadas `uci` para obtener todos los datos y pasarlos a shell variables > que luego van a ser empleadas para asociarse con las interfaces wi-fi > cuya sintáxis para que `qrencode` genere los códigos de acceso va a estar mucho más prolijamente establecida.
