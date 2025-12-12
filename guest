@@ -131,7 +131,7 @@ cat <<'EOF'
     else document.documentElement.removeAttribute("data-theme");
     localStorage.setItem("guest2_theme",t);
   }
-  const saved = localStorage.getItem("guest2_theme") || "light";
+  const saved = localStorage.getItem("guest2_theme") || "dark";
   apply(saved);
   document.getElementById("themeToggle").addEventListener("click", ()=>{
     const cur = localStorage.getItem("guest2_theme") || "light";
